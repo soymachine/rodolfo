@@ -90,7 +90,7 @@ async function main() {
   // --- Vídeo: JPEG por la tubería → H.264
   const silent = path.join(BUILD, full ? 'video-silent.mp4' : 'preview-silent.mp4');
   const enc = run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-c:v', 'mjpeg', '-framerate', String(fps), '-i', '-',
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-pix_fmt', 'yuv420p', '-tune', 'animation', silent], { input: true });
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-pix_fmt', 'yuv420p', '-tune', 'animation', silent], { input: true });
   const total = Math.round((to - from) * fps);
   const BATCH = 12;
   const t0 = Date.now();

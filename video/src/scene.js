@@ -11,16 +11,19 @@ import {
   GRAVITY, COFFIN, LID_REST_H, APPLE_FALL, APPLE_LAND, APPLE_BOUNCE,
 } from './timeline.js';
 import { drawPerson, computePose } from './figures.js';
+import { setupHalftone, printTo, CSS } from './halftone.js';
+import { drawType, drawTitle, SANS } from './type.js';
 
-const RED = '#b3261e';
-const FONT = '"Cormorant Garamond", "Cormorant", Georgia, serif';
+// En el lienzo de densidad, el rojo puro significa "tinta roja".
+const RED = '#ff0000';
+const FONT = SANS;
 
 // ---------------------------------------------------------------------------
 // Cámara: claves (x, y del centro de pantalla en unidades de mundo; z = zoom)
 const C = (t, x, y, z, ease) => ({ t, x, y, z, ease });
 const CAM_KEYS = [
-  C(0.0, -74, -430, 2.85),
-  C(2.9, -74, -415, 2.6),
+  C(0.0, -208, -297, 2.85),
+  C(2.9, -196, -290, 2.62),
   C(5.3, -250, -140, 1.3),
   C(5.9, -245, -142, 1.24),
   C(8.0, 380, -300, 0.5),
@@ -91,20 +94,21 @@ const reset = (ctx) => ctx.setTransform(1, 0, 0, 1, 0, 0);
 
 // ---------------------------------------------------------------------------
 // Paleta: día → atardecer → noche
+// (valores en gris = cantidad de tinta azul en la trama: blanco = papel, negro = tinta plena)
 const DAY = {
-  skyTop: '#ddd2bf', skyBot: '#efe7d7', m0: '#d9cdb8', m1: '#c6b8a1', m2: '#ad9d86', m3: '#968670',
-  wall: '#ece5d6', wallShade: '#cbbfaa', g0: '#cfc0a3', g1: '#b9a687', soil: '#5c4737', ink: '#1b1714',
-  cyp: '#272a22', paper: '#f1ead9', mist: '#f3ecdf',
+  skyTop: '#ececec', skyBot: '#ffffff', m0: '#dcdcdc', m1: '#c8c8c8', m2: '#b0b0b0', m3: '#989898',
+  wall: '#ffffff', wallShade: '#d8d8d8', g0: '#f6f6f6', g1: '#d6d6d6', soil: '#585858', ink: '#000000',
+  cyp: '#000000', paper: '#ffffff', mist: '#ffffff',
 };
 const DUSK = {
-  skyTop: '#8a7f95', skyBot: '#e9b48a', m0: '#bba59c', m1: '#a28d88', m2: '#857274', m3: '#6c5c5e',
-  wall: '#d9c3ae', wallShade: '#a99382', g0: '#ad9580', g1: '#957d69', soil: '#463428', ink: '#15110f',
-  cyp: '#1d1e1a', paper: '#efdcc6', mist: '#e8c9b0',
+  skyTop: '#a8a8a8', skyBot: '#ebebeb', m0: '#bcbcbc', m1: '#a4a4a4', m2: '#8c8c8c', m3: '#747474',
+  wall: '#e2e2e2', wallShade: '#b4b4b4', g0: '#cfcfcf', g1: '#adadad', soil: '#404040', ink: '#000000',
+  cyp: '#000000', paper: '#ffffff', mist: '#ececec',
 };
 const NIGHT = {
-  skyTop: '#0d1222', skyBot: '#27304d', m0: '#2c3450', m1: '#232a42', m2: '#1c2236', m3: '#161b2b',
-  wall: '#4b4f60', wallShade: '#363948', g0: '#3a3940', g1: '#2c2b31', soil: '#1d1917', ink: '#09090b',
-  cyp: '#0c0e0c', paper: '#c9c3b6', mist: '#3a4466',
+  skyTop: '#1c1c1c', skyBot: '#4c4c4c', m0: '#5a5a5a', m1: '#4c4c4c', m2: '#3e3e3e', m3: '#323232',
+  wall: '#9a9a9a', wallShade: '#747474', g0: '#868686', g1: '#727272', soil: '#1a1a1a', ink: '#000000',
+  cyp: '#000000', paper: '#ffffff', mist: '#5c5c5c',
 };
 function palette(T) {
   const dusk = ramp(T, 40, 57) * 0.35 + win(T, 57.9, 59.6, 59.6, 61.4) * 0.65;
@@ -292,44 +296,67 @@ const evaPose = () => ({ kind: 'woman', hat: 'mantilla', bow: 0.25, headTurn: 1,
 let scratch = null;
 
 // ---------------------------------------------------------------------------
+let dens = null, densCtx = null;
 export function init() {
+  dens = document.createElement('canvas');
+  dens.width = W; dens.height = H;
+  densCtx = dens.getContext('2d', { willReadFrequently: true });
+  setupHalftone(W, H);
   paperTex = makePaper();
   evaPts = sampleEva();
   scratch = document.createElement('canvas');
   scratch.width = 900; scratch.height = 1200;
 }
 
-/** Dibuja una persona en (x,z) con transparencia real (vía lienzo auxiliar). */
+/**
+ * Dibuja una persona en (x,z). Se pinta en un lienzo auxiliar para poder modelarla como
+ * el salmón del cartel: tinta plena en el lomo (arriba y detrás) y trama cada vez más
+ * abierta hacia el "vientre" (abajo y delante); y para aplicar transparencia sin solapes.
+ */
 function person(ctx, x, z, o, alpha = 1, h = 0) {
+  alpha *= introFigures;
   if (alpha <= 0.003) return null;
-  // perspectiva atmosférica: las figuras del fondo, con tinta algo más clara
-  if (!o.ink) o = { ...o, ink: lerpColor(pal.ink, pal.m2, clamp((112 - z) / 112) * 0.3) };
+  if (!o.ink) o = { ...o, ink: lerpColor(pal.ink, pal.m2, clamp((112 - z) / 112) * 0.22) };
   const facing = o.f || 1;
   const Hh = o.H || 300;
   const [sx, sy, s] = P(x, z, h);
   const sc = s * Hh / 300;
-  // descarte fuera de pantalla
   if (sx < -300 * sc || sx > W + 300 * sc || sy < -50 || sy - 360 * sc > H) return null;
-  if (alpha >= 0.995) {
-    ctx.setTransform(sc * facing, 0, 0, sc, sx, sy);
-    drawPerson(ctx, o);
-    reset(ctx);
-    return true;
-  }
-  // con alpha: render en lienzo auxiliar ajustado a su caja
   const bw = Math.ceil(300 * sc), bh = Math.ceil(400 * sc);
   if (bw > scratch.width || bh > scratch.height) { scratch.width = Math.max(bw, scratch.width); scratch.height = Math.max(bh, scratch.height); }
   const g = scratch.getContext('2d');
   g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-over';
   g.clearRect(0, 0, bw + 2, bh + 2);
-  g.setTransform(sc * facing, 0, 0, sc, bw / 2, bh - 20 * sc);
+  const footY = bh - 20 * sc;
+  g.setTransform(sc * facing, 0, 0, sc, bw / 2, footY);
   drawPerson(g, o);
+  // modelado: degradado de luz recortado a la silueta
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = 'source-atop';
+  const top = footY - 330 * sc;
+  const lv = g.createLinearGradient(0, top, 0, footY);
+  lv.addColorStop(0, 'rgba(255,255,255,0)');
+  lv.addColorStop(0.3, 'rgba(255,255,255,0.04)');
+  lv.addColorStop(0.62, 'rgba(255,255,255,0.42)');
+  lv.addColorStop(0.8, 'rgba(255,255,255,0.3)');
+  lv.addColorStop(1, 'rgba(255,255,255,0.05)');
+  g.fillStyle = lv;
+  g.fillRect(0, 0, bw, bh);
+  const front = bw / 2 + facing * 40 * sc, back = bw / 2 - facing * 40 * sc;
+  const lh = g.createLinearGradient(back, 0, front, 0);
+  lh.addColorStop(0, 'rgba(255,255,255,0)');
+  lh.addColorStop(1, 'rgba(255,255,255,0.22)');
+  g.fillStyle = lh;
+  g.fillRect(0, 0, bw, footY - 120 * sc);
+  g.globalCompositeOperation = 'source-over';
   ctx.save();
   ctx.globalAlpha = alpha;
-  ctx.drawImage(scratch, 0, 0, bw, bh, sx - bw / 2, sy - (bh - 20 * sc), bw, bh);
+  ctx.drawImage(scratch, 0, 0, bw, bh, sx - bw / 2, sy - footY, bw, bh);
   ctx.restore();
   return true;
 }
+let introFigures = 1;
 /** Posición en mundo (x, h) de la mano delantera de una figura situada en (x,z). */
 function handWorld(x, z, o) {
   const p = computePose(o);
@@ -342,74 +369,77 @@ function handWorld(x, z, o) {
 export function draw(ctx, T) {
   cam = camera(T);
   pal = palette(T);
+  introFigures = ramp(T, 2.7, 3.9);
+  // 1) escena en el lienzo de densidad de tinta
+  const d = densCtx;
+  reset(d);
+  d.globalAlpha = 1;
+  d.globalCompositeOperation = 'source-over';
+  drawSky(d, T);
+  drawMountains(d, T);
+  drawBirds(d, T);
+  drawCypresses(d, T);
+  drawWall(d, T);
+  drawGround(d, T);
+  drawRipples(d, T);
+  drawTree(d, T);
+  drawWorld(d, T);
+  drawFiesta(d, T);
+  drawApple(d, T);
+  drawGlows(d, T);
+  drawVignette(d, T);
+  // 2) impresión a dos tintas (semitono azul + rojo)
   reset(ctx);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
-
-  drawSky(ctx, T);
-  drawMountains(ctx, T);
-  drawBirds(ctx, T);
-  drawSilencioWord(ctx, T);
-  drawCypresses(ctx, T);
-  drawWall(ctx, T);
-  drawGround(ctx, T);
-  drawRipples(ctx, T);
-  drawTree(ctx, T);
-  drawWorld(ctx, T);
-  drawFiesta(ctx, T);
-  drawApple(ctx, T);
-  drawGlows(ctx, T);
+  printTo(ctx, d);
   drawPost(ctx, T);
-  drawSubtitles(ctx, T);
+  // 3) tipografía
+  drawType(ctx, T, pal.night);
   drawFade(ctx, T);
   drawTitle(ctx, T);
 }
 
 // ---------------------------------------------------------------------------
+// El gran círculo rojo del cartel: un sol que preside el valle y se pone con «algún día».
+const SUN_KEYS = [
+  { t: 0, x: -303, y: -207, r: 160 },
+  { t: 2.9, x: -303, y: -215, r: 160 },
+  { t: 5.6, x: -320, y: -330, r: 165 },
+  { t: 57.6, x: -150, y: -350, r: 165 },
+  { t: 61.2, x: -60, y: -60, r: 170 },
+];
 function drawSky(ctx, T) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, pal.skyTop);
-  g.addColorStop(0.75, pal.skyBot);
+  g.addColorStop(0.7, pal.skyBot);
   g.addColorStop(1, pal.skyBot);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
-  // sol pálido que desciende con el paso del tiempo
-  const zl = layerT(ctx, 0.06);
-  const sunY = lerp(-560, -150, ramp(T, 40, 61));
-  const sunX = lerp(700, 1300, ramp(T, 0, 62));
-  const sa = 1 - ramp(T, 59.5, 61.5);
-  if (sa > 0) {
-    const gr = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 260);
-    gr.addColorStop(0, rgba('#fff8e8', 0.55 * sa));
-    gr.addColorStop(0.25, rgba('#fbe9cc', 0.25 * sa));
-    gr.addColorStop(1, rgba('#fbe9cc', 0));
-    ctx.fillStyle = gr;
-    ctx.fillRect(sunX - 260, sunY - 260, 520, 520);
-    ctx.fillStyle = rgba('#fffaf0', 0.65 * sa);
-    ctx.beginPath(); ctx.arc(sunX, sunY, 46, 0, Math.PI * 2); ctx.fill();
+  const sun = keyframes(SUN_KEYS, T, ['x', 'y', 'r']);
+  if (T < 61.3) {
+    layerT(ctx, 0.05);
+    ctx.fillStyle = RED;
+    ctx.beginPath(); ctx.arc(sun.x, sun.y, sun.r, 0, Math.PI * 2); ctx.fill();
+    reset(ctx);
   }
-  reset(ctx);
-  // estrellas y luna
+  // estrellas y luna (papel que asoma en el cielo nocturno)
   const n = pal.night;
   if (n > 0.02) {
-    for (const s of STARS) {
-      const tw = 0.6 + 0.4 * Math.sin(T * 2 + s.tw);
-      ctx.fillStyle = rgba('#fff6e0', n * tw * (0.35 + s.s * 0.6));
-      const px = ((s.x * W * 1.3 - cam.x * 0.03) % (W * 1.3) + W * 1.3) % (W * 1.3) - W * 0.15;
-      ctx.fillRect(px, s.y * H, 1.2 + s.s * 1.6, 1.2 + s.s * 1.6);
+    for (const st of STARS) {
+      const tw = 0.6 + 0.4 * Math.sin(T * 2 + st.tw);
+      ctx.fillStyle = `rgba(255,255,255,${n * tw * (0.5 + st.s * 0.5)})`;
+      const px = ((st.x * W * 1.3 - cam.x * 0.03) % (W * 1.3) + W * 1.3) % (W * 1.3) - W * 0.15;
+      const sz = 2 + st.s * 2.5;
+      ctx.fillRect(px, st.y * H, sz, sz);
     }
     layerT(ctx, 0.05);
-    const mx = 300, my = lerp(-200, -620, ramp(T, 59.5, 64));
-    const gr = ctx.createRadialGradient(mx, my, 0, mx, my, 200);
-    gr.addColorStop(0, rgba('#fff3d6', 0.35 * n));
-    gr.addColorStop(1, rgba('#fff3d6', 0));
-    ctx.fillStyle = gr;
-    ctx.fillRect(mx - 200, my - 200, 400, 400);
-    ctx.fillStyle = rgba('#f6efdc', n);
-    ctx.beginPath(); ctx.arc(mx, my, 40, 0, Math.PI * 2); ctx.fill();
+    const mx = 420, my = lerp(-200, -600, ramp(T, 59.5, 64));
+    ctx.fillStyle = `rgba(255,255,255,${n})`;
+    ctx.beginPath(); ctx.arc(mx, my, 70, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = pal.skyTop;
-    ctx.beginPath(); ctx.arc(mx + 16, my - 8, 36, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(mx + 30, my - 14, 62, 0, Math.PI * 2); ctx.fill();
     reset(ctx);
   }
 }
@@ -418,7 +448,10 @@ function drawMountains(ctx, T) {
   for (const m of MOUNTAINS) {
     const zl = layerT(ctx, m.p);
     const x0 = cam.x * m.p - (W / 2) / zl - 40, x1 = cam.x * m.p + (W / 2) / zl + 40;
-    ctx.fillStyle = pal[m.key];
+    const mg0 = ctx.createLinearGradient(0, m.base - m.amp * 1.1, 0, m.base + 160);
+    mg0.addColorStop(0, pal[m.key]);
+    mg0.addColorStop(1, lerpColor(pal[m.key], pal.skyBot, 0.65));
+    ctx.fillStyle = mg0;
     ctx.beginPath();
     ctx.moveTo(x0, 3000);
     for (let x = x0; x <= x1 + 12; x += 12) ctx.lineTo(x, ridge(m, x));
@@ -455,12 +488,12 @@ function drawMountains(ctx, T) {
           ctx.fillRect(-3, 0, 6, 9);
           ctx.restore();
           if (pal.night > 0.3) {
-            ctx.fillStyle = rgba('#ffcf7a', pal.night * 0.8);
+            ctx.fillStyle = rgba('#ffffff', pal.night * 0.9);
             ctx.fillRect(h.x + h.w * 0.3, by - h.h * 0.55, 4, 5);
           }
         }
         if (pal.night > 0.3 && hash(h.x) > 0.4) {
-          ctx.fillStyle = rgba('#ffcf7a', pal.night * 0.85);
+          ctx.fillStyle = rgba('#ffffff', pal.night * 0.9);
           ctx.fillRect(h.x + h.w * 0.3, by - h.h * 0.55, 4, 5);
         }
       }
@@ -497,26 +530,6 @@ function drawBirds(ctx, T) {
     ctx.quadraticCurveTo(x + s * 0.4, y - 2, x + s, y - flap * s * 0.8);
     ctx.stroke();
   }
-  reset(ctx);
-}
-
-function drawSilencioWord(ctx, T) {
-  const t0 = cue('silencio');
-  const a = win(T, t0 - 0.1, t0 + 0.7, t0 + 2.2, cueEnd('valle') + 0.6);
-  if (a <= 0) return;
-  const zl = layerT(ctx, 0.3);
-  ctx.font = `300 ${150}px ${FONT}`;
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = rgba(pal.ink, 0.16 * a);
-  const word = 'silencio';
-  const spread = lerp(70, 210, easeOut((T - t0) / 3.2));
-  const cx = 120;
-  for (let i = 0; i < word.length; i++) {
-    const la = win(T, t0 + i * 0.07, t0 + i * 0.07 + 0.5, 99, 100);
-    ctx.globalAlpha = la;
-    ctx.fillText(word[i], cx + (i - (word.length - 1) / 2) * spread - 30, -400 + Math.sin(i * 1.3) * 8);
-  }
-  ctx.globalAlpha = 1;
   reset(ctx);
 }
 
@@ -764,7 +777,6 @@ function drawWorld(ctx, T) {
   drawRopes(ctx, T);
   drawGrainsInFlight(ctx, T);
   drawPasadoWord(ctx, T);
-  drawSoloWord(ctx, T);
   drawNumerals(ctx, T);
   drawHandshakeSparks(ctx, T);
   drawCrosses(ctx, T);
@@ -789,10 +801,8 @@ function drawBlessing(ctx, T) {
   if (a <= 0) return;
   const [cx, cy, s] = P(-370, 40, -330);
   ctx.save();
-  ctx.strokeStyle = rgba('#d9a441', 0.9 * a);
-  ctx.shadowColor = rgba('#f4c66b', a);
-  ctx.shadowBlur = 18 * s;
-  ctx.lineWidth = 4 * s;
+  ctx.strokeStyle = rgba(RED, a);
+  ctx.lineWidth = 7 * s;
   ctx.lineCap = 'round';
   const v = clamp(u * 2), hz = clamp(u * 2 - 1);
   ctx.beginPath();
@@ -861,7 +871,7 @@ function drawRopes(ctx, T) {
     // la cuerda se "dibuja" desde la mano hacia el ataúd y luego se suelta
     const rx = lerp(ax, bx, draw), ry = lerp(ay, by, draw);
     const sag = (1 - s.lift * 0.8) * 26 * cam.z * (1 - s.release);
-    ctx.strokeStyle = rgba('#6b4a2c', (1 - s.release));
+    ctx.strokeStyle = rgba('#3a3a3a', (1 - s.release));
     ctx.lineWidth = 3.2 * cam.z;
     ctx.beginPath();
     ctx.moveTo(ax, ay);
@@ -881,7 +891,7 @@ function drawNumerals(ctx, T) {
     ctx.save();
     ctx.globalAlpha = a;
     ctx.fillStyle = RED;
-    ctx.font = `italic 400 ${46 * s}px ${FONT}`;
+    ctx.font = `800 ${52 * s}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText(nums[i], x, y);
     ctx.restore();
@@ -916,11 +926,11 @@ function drawBars(ctx, T) {
     const [x1] = P(270 + off, z, -7);
     ctx.save();
     ctx.globalAlpha = a;
-    ctx.strokeStyle = '#4a3322';
+    ctx.strokeStyle = '#2e2e2e';
     ctx.lineWidth = 13 * s;
     ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke();
-    ctx.strokeStyle = rgba('#8a6a4a', 0.7);
+    ctx.strokeStyle = rgba('#9a9a9a', 0.7);
     ctx.lineWidth = 3 * s;
     ctx.beginPath(); ctx.moveTo(x0, y0 - 3 * s); ctx.lineTo(x1, y0 - 3 * s); ctx.stroke();
     ctx.restore();
@@ -1005,8 +1015,8 @@ function drawCoffin(ctx, T) {
   const top = bottom - COFFIN.height;
   const depth = clamp(top / LID_REST_H);
   const dark = 0.15 + 0.55 * clamp(depth);
-  const wood = lerpColor('#6e4a31', '#120c08', dark + pal.night * 0.3);
-  const woodTop = lerpColor('#8b6142', '#1a120c', dark + pal.night * 0.3);
+  const wood = lerpColor('#4a4a4a', '#0a0a0a', dark + pal.night * 0.3);
+  const woodTop = lerpColor('#7a7a7a', '#121212', dark + pal.night * 0.3);
   // banda lateral
   const tp = COFFIN_TOP.map(([x, z]) => P(x, z, top));
   const bp = COFFIN_TOP.map(([x, z]) => P(x, z, bottom));
@@ -1027,7 +1037,7 @@ function drawCoffin(ctx, T) {
   ctx.stroke();
   // cruz en la tapa
   const [cx, cy, s] = P(-20, 110, top);
-  ctx.strokeStyle = rgba('#d8c7a4', 0.55 * (1 - depth * 0.6));
+  ctx.strokeStyle = rgba('#ffffff', 0.55 * (1 - depth * 0.6));
   ctx.lineWidth = 3 * s;
   ctx.beginPath();
   ctx.moveTo(cx - 34 * s, cy); ctx.lineTo(cx + 40 * s, cy);
@@ -1069,7 +1079,7 @@ function drawLandedGrains(ctx, T) {
   for (const g of GRAINS) {
     if (T < g.t0 + g.dt) continue;
     const [px, py, s] = P(g.x1, g.z1, top - 1);
-    ctx.fillStyle = lerpColor('#8f6f4f', '#c4a27a', g.shade);
+    ctx.fillStyle = lerpColor('#9a9a9a', '#d4d4d4', g.shade);
     ctx.beginPath();
     ctx.ellipse(px, py, g.size * s, g.size * 0.6 * s, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1080,7 +1090,7 @@ function drawGrainsInFlight(ctx, T) {
     if (T < g.t0 || T >= g.t0 + g.dt) continue;
     const [x, z, h] = grainPos(g, T);
     const [px, py, s] = P(x, z, h);
-    ctx.fillStyle = lerpColor('#2f2118', '#7a5e45', g.shade * 0.5);
+    ctx.fillStyle = lerpColor('#222222', '#6a6a6a', g.shade * 0.5);
     ctx.beginPath();
     ctx.ellipse(px, py, g.size * s, g.size * 0.75 * s, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1120,7 +1130,7 @@ function drawGraveMound(ctx, T, fill) {
   }
   // cruz de madera
   const [cx, cy, s] = P(-6, PIT.z0 + 2, -24);
-  ctx.fillStyle = lerpColor('#4c3523', pal.ink, 0.4);
+  ctx.fillStyle = lerpColor('#3a3a3a', pal.ink, 0.4);
   ctx.fillRect(cx - 4 * s, cy - 96 * s, 8 * s, 96 * s);
   ctx.fillRect(cx - 28 * s, cy - 76 * s, 56 * s, 8 * s);
   ctx.restore();
@@ -1164,14 +1174,14 @@ function drawPasadoWord(ctx, T) {
   ctx.beginPath();
   ctx.rect(0, 0, W, c3[1]);
   ctx.clip();
-  const word = 'el pasado';
-  ctx.font = `italic 300 ${44 * cam.z}px ${FONT}`;
+  const word = 'EL PASADO';
+  ctx.font = `800 ${34 * cam.z}px ${FONT}`;
   ctx.textAlign = 'center';
-  ctx.fillStyle = rgba(pal.paper, 0.92 * a);
+  ctx.fillStyle = rgba(pal.paper, a);
   for (let i = 0; i < word.length; i++) {
     const lag = i * 0.06;
     const b = coffinBottomH(T - lag);
-    const [x, y] = P(-80 + i * 20, 112, b - COFFIN.height - 4);
+    const [x, y] = P(-84 + i * 21, 114, b - COFFIN.height - 4);
     ctx.fillText(word[i], x, y);
   }
   ctx.restore();
@@ -1274,18 +1284,6 @@ function drawBoy(ctx, T) {
   }
   person(ctx, x, 150, boyPose(T));
 }
-function drawSoloWord(ctx, T) {
-  const t0 = cue('solo');
-  const a = win(T, t0 - 0.05, t0 + 0.4, cueEnd('tumba') + 0.2, cueEnd('tumba') + 0.7);
-  if (a <= 0) return;
-  const [x, y, s] = P(BOY_X + 70, 150, -150);
-  ctx.save();
-  ctx.font = `italic 300 ${34 * s}px ${FONT}`;
-  ctx.fillStyle = rgba(pal.ink, 0.7 * a);
-  ctx.fillText('solo', x, y - 8 * s * easeOut(invLerp(t0, t0 + 1, T)));
-  ctx.restore();
-}
-
 // --- Procesión de dolientes
 function mournerX(i, T) { return procX(T) - i * PROC.spacing; }
 function mournerPose(i, T) {
@@ -1380,10 +1378,8 @@ function drawCrosses(ctx, T) {
     const s = s0 * MOURNER_STYLE[i].H / 300;
     const v = clamp(u * 2), hz = clamp(u * 2 - 1);
     ctx.save();
-    ctx.strokeStyle = rgba('#e0ac4a', 0.95 * a);
-    ctx.shadowColor = rgba('#f7cf73', a);
-    ctx.shadowBlur = 14 * s;
-    ctx.lineWidth = 3.4 * s;
+    ctx.strokeStyle = rgba(RED, a);
+    ctx.lineWidth = 5.5 * s;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(cx, cy - 34 * s); ctx.lineTo(cx, cy - 34 * s + 74 * s * v);
@@ -1398,9 +1394,9 @@ function drawHandshakeSparks(ctx, T) {
     if (hs < 0.5) continue;
     const x = mournerX(i, T) + HS_GAP / 2;
     const [px, py, s] = P(x, (PROC.z + FAMILY_Z) / 2, -185);
-    ctx.fillStyle = rgba('#e0ac4a', (hs - 0.5) * 1.4);
+    ctx.fillStyle = rgba(RED, clamp((hs - 0.5) * 2));
     ctx.beginPath();
-    ctx.arc(px, py, 5 * s, 0, Math.PI * 2);
+    ctx.arc(px, py, 9 * s, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -1429,7 +1425,7 @@ function drawGrave(ctx, x, z, type, sc, alpha, hop, engraved, T, glowCandle = 0,
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(sx, sy - hop * s);
-  ctx.fillStyle = fresh ? lerpColor('#f4efe4', '#c9c6d6', pal.night) : lerpColor(pal.wallShade, pal.ink, 0.25);
+  ctx.fillStyle = fresh ? '#ffffff' : lerpColor(pal.wallShade, pal.ink, 0.25);
   ctx.strokeStyle = rgba(pal.ink, 0.8);
   ctx.lineWidth = 2 * s;
   if (type === 'cross') {
@@ -1462,8 +1458,12 @@ function drawGrave(ctx, x, z, type, sc, alpha, hop, engraved, T, glowCandle = 0,
   // vela
   const nc = pal.night * glowCandle;
   if (nc > 0.01) {
-    ctx.fillStyle = rgba('#efe4cf', nc);
-    ctx.fillRect(sx + 40 * s, sy - 18 * s, 6 * s, 18 * s);
+    ctx.fillStyle = rgba('#ffffff', nc);
+    ctx.fillRect(sx + 40 * s, sy - 18 * s, 7 * s, 18 * s);
+    ctx.fillStyle = rgba(RED, nc);
+    ctx.beginPath();
+    ctx.ellipse(sx + 43.5 * s, sy - 25 * s, 4 * s, 7 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
     GLOWS.push({ x: sx + 43 * s, y: sy - 24 * s, r: 70 * s, a: nc * (0.85 + 0.15 * Math.sin(T * 13 + x)) });
   }
 }
@@ -1493,8 +1493,8 @@ function drawNewGraves(ctx, T) {
     const ha = win(T, t0, t0 + 0.2, t0 + 0.6, t0 + 1.5);
     if (ha > 0) {
       const [hx, hy, s] = P(x, PROC.z, -150);
-      ctx.strokeStyle = rgba('#e7b75a', 0.8 * ha);
-      ctx.lineWidth = 2.5 * s;
+      ctx.strokeStyle = rgba(RED, ha);
+      ctx.lineWidth = 4.5 * s;
       ctx.beginPath();
       ctx.ellipse(hx, hy - 10 * s * ha, 30 * s, 8 * s, 0, 0, Math.PI * 2);
       ctx.stroke();
@@ -1505,7 +1505,7 @@ function drawNewGraves(ctx, T) {
 // ---------------------------------------------------------------------------
 // La fiesta: papel picado, farolillos, confeti
 let GLOWS = [];
-const PICADO_COLORS = ['#d8452f', '#f0a33a', '#e6578f', '#3aa6a0', '#f2d14b', '#7a5bc2', '#4f9b4a'];
+const PICADO_COLORS = [RED, '#000000', RED, '#8a8a8a', '#ffffff'];
 function drawFiesta(ctx, T) {
   const t0 = cue('serían');
   if (T < t0 - 0.1) return;
@@ -1521,8 +1521,8 @@ function drawFiesta(ctx, T) {
       const x = lerp(st.x0, st.x1, u);
       return P(x, st.z, st.h + Math.sin(u * Math.PI) * st.sag + Math.sin(T * 1.5 + u * 8) * 3);
     };
-    ctx.strokeStyle = rgba('#d9d0bd', 0.8);
-    ctx.lineWidth = 1.2 * cam.z;
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 2 * cam.z;
     ctx.beginPath();
     for (let u = 0; u <= unf + 1e-6; u += 0.02) {
       const [x, y] = pt(u);
@@ -1558,9 +1558,9 @@ function drawFiesta(ctx, T) {
       ctx.restore();
       // farolillos cada pocos banderines
       if (k % 6 === 3) {
-        ctx.fillStyle = rgba('#ffd890', 0.95);
+        ctx.fillStyle = RED;
         ctx.beginPath();
-        ctx.ellipse(x, y + 22 * s, 11 * s, 15 * s, 0, 0, Math.PI * 2);
+        ctx.arc(x, y + 24 * s, 15 * s, 0, Math.PI * 2);
         ctx.fill();
         GLOWS.push({ x, y: y + 22 * s, r: 110 * s, a: 0.8 + 0.2 * Math.sin(T * 7 + k) });
       }
@@ -1640,12 +1640,8 @@ function drawAppleShape(ctx, x, y, s, rot) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(rot);
-  const r = 17 * s;
-  const g = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.1, 0, 0, r * 1.2);
-  g.addColorStop(0, '#e2483a');
-  g.addColorStop(0.6, RED);
-  g.addColorStop(1, '#6e130f');
-  ctx.fillStyle = g;
+  const r = 19 * s;
+  ctx.fillStyle = RED;
   ctx.beginPath();
   ctx.moveTo(0, -r * 0.7);
   ctx.bezierCurveTo(r * 0.5, -r * 1.15, r * 1.25, -r * 0.7, r * 1.05, r * 0.15);
@@ -1653,13 +1649,13 @@ function drawAppleShape(ctx, x, y, s, rot) {
   ctx.bezierCurveTo(-r * 0.35, r * 1.1, -r * 0.9, r * 0.95, -r * 1.05, r * 0.15);
   ctx.bezierCurveTo(-r * 1.25, -r * 0.7, -r * 0.5, -r * 1.15, 0, -r * 0.7);
   ctx.fill();
-  ctx.fillStyle = 'rgba(255,240,220,0.5)';
+  ctx.fillStyle = '#ffffff';
   ctx.beginPath();
-  ctx.ellipse(-r * 0.45, -r * 0.3, r * 0.16, r * 0.28, 0.5, 0, Math.PI * 2);
+  ctx.ellipse(-r * 0.48, -r * 0.3, r * 0.13, r * 0.26, 0.5, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#2b2a18';
+  ctx.fillStyle = '#000000';
   ctx.beginPath();
-  ctx.ellipse(r * 0.35, -r * 0.95, r * 0.42, r * 0.16, -0.5, 0, Math.PI * 2);
+  ctx.ellipse(r * 0.38, -r * 0.98, r * 0.46, r * 0.17, -0.5, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
@@ -1668,12 +1664,11 @@ function drawAppleShape(ctx, x, y, s, rot) {
 function drawGlows(ctx, T) {
   if (!GLOWS.length) return;
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter';
   for (const g of GLOWS) {
     const gr = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
-    gr.addColorStop(0, `rgba(255,200,120,${0.5 * g.a})`);
-    gr.addColorStop(0.3, `rgba(255,170,80,${0.18 * g.a})`);
-    gr.addColorStop(1, 'rgba(255,150,60,0)');
+    gr.addColorStop(0, `rgba(255,255,255,${0.75 * g.a})`);
+    gr.addColorStop(0.35, `rgba(255,255,255,${0.3 * g.a})`);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = gr;
     ctx.fillRect(g.x - g.r, g.y - g.r, g.r * 2, g.r * 2);
   }
@@ -1682,106 +1677,31 @@ function drawGlows(ctx, T) {
 }
 
 function drawPost(ctx, T) {
-  // textura de papel
+  // textura de papel sobre la impresión
   ctx.save();
   ctx.globalCompositeOperation = 'soft-light';
-  ctx.globalAlpha = 0.85;
+  ctx.globalAlpha = 0.55;
   ctx.drawImage(paperTex, 0, 0);
   ctx.restore();
-  // viñeta (más intensa cuando el chico se queda solo)
+}
+
+/** Viñeta en la propia trama (más intensa cuando el chico se queda solo). */
+function drawVignette(ctx, T) {
   const solo = win(T, cue('chico') - 0.4, cue('solo'), cue('mirando') - 0.4, cue('mirando') + 0.2);
-  const v = 0.32 + 0.3 * solo + 0.1 * pal.night;
-  const g = ctx.createRadialGradient(W / 2, H * 0.48, H * 0.35, W / 2, H * 0.5, H * 1.05);
-  g.addColorStop(0, rgba(pal.ink, 0));
-  g.addColorStop(1, rgba(pal.ink, v));
+  const v = 0.1 + 0.4 * solo;
+  const g = ctx.createRadialGradient(W / 2, H * 0.5, H * 0.38, W / 2, H * 0.5, H * 1.05);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, `rgba(0,0,0,${v})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 }
 
-// ---------------------------------------------------------------------------
-// Subtítulos palabra a palabra
-const HIGHLIGHT = { boina: RED, fiesta: '#f0a33a', amén: '#a5762a' };
-function drawSubtitles(ctx, T) {
-  const size = 54;
-  ctx.save();
-  ctx.font = `italic 400 ${size}px ${FONT}`;
-  ctx.textBaseline = 'alphabetic';
-  const baseY = H - 84;
-  let bandA = 0;
-  for (const ph of phrases) {
-    const a = win(T, ph.s - 0.15, ph.s, ph.hide - 0.35, ph.hide);
-    if (a > bandA) bandA = a;
-  }
-  if (bandA > 0) {
-    const g = ctx.createLinearGradient(0, H - 230, 0, H);
-    const bc = pal.night > 0.5 ? '#0b0d16' : pal.paper;
-    g.addColorStop(0, rgba(bc, 0));
-    g.addColorStop(0.55, rgba(bc, 0.55 * bandA));
-    g.addColorStop(1, rgba(bc, 0.75 * bandA));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, H - 230, W, 230);
-  }
-  const textCol = pal.night > 0.5 ? '#f3ead8' : '#1b1714';
-  for (const ph of phrases) {
-    const pa = 1 - ramp(T, ph.hide - 0.35, ph.hide);
-    if (T < ph.s - 0.15 || pa <= 0) continue;
-    const space = ctx.measureText(' ').width;
-    const widths = ph.words.map((w) => ctx.measureText(w.text).width);
-    const total = widths.reduce((a, b) => a + b, 0) + space * (widths.length - 1);
-    let x = (W - total) / 2;
-    ph.words.forEach((w, i) => {
-      const wa = ramp(T, w.s - 0.1, w.s + 0.18) * pa;
-      if (wa > 0) {
-        const key = w.text.toLowerCase().replace(/[^a-záéíóúñ]/g, '');
-        ctx.fillStyle = HIGHLIGHT[key] || textCol;
-        ctx.globalAlpha = wa;
-        ctx.fillText(w.text, x, baseY + (1 - easeOut(ramp(T, w.s - 0.1, w.s + 0.25))) * 12);
-      }
-      x += widths[i] + space;
-    });
-  }
-  ctx.restore();
-}
-
-// ---------------------------------------------------------------------------
-function drawTitle(ctx, T) {
-  const intro = win(T, 0.35, 1.4, 3.0, 3.75);
-  const outro = ramp(T, 66.6, 67.6);
-  const a = Math.max(intro, outro);
-  if (a <= 0) return;
-  const title = 'Una manzana para la sed';
-  ctx.save();
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = `300 ${112}px ${FONT}`;
-  const y = T < 30 ? H * 0.3 : H * 0.42;
-  const col = T < 30 ? '#1b1714' : '#f3ead8';
-  // espaciado de letras que se va cerrando
-  const spacing = T < 30 ? lerp(18, 6, easeOut(invLerp(0.3, 3.6, T))) : lerp(14, 6, easeOut(invLerp(66.6, 69, T)));
-  const chars = [...title];
-  const widths = chars.map((c) => ctx.measureText(c).width);
-  const total = widths.reduce((s, w) => s + w, 0) + spacing * (chars.length - 1);
-  let x = (W - total) / 2;
-  const t0 = T < 30 ? 0.35 : 66.6;
-  chars.forEach((ch, i) => {
-    const la = ramp(T, t0 + i * 0.035, t0 + i * 0.035 + 0.6) * (T < 30 ? (1 - ramp(T, 3.0, 3.75)) : 1);
-    ctx.fillStyle = rgba(col, la);
-    ctx.fillText(ch, x, y + (1 - la) * 10);
-    x += widths[i] + spacing;
-  });
-  // filete rojo bajo el título
-  const lw = 160 * (T < 30 ? intro : outro);
-  ctx.fillStyle = rgba(RED, a);
-  ctx.fillRect(W / 2 - lw / 2, y + 34, lw, 3);
-  ctx.restore();
-}
-
 function drawFade(ctx, T) {
-  // fundido desde negro al inicio, y oscurecimiento final bajo el título
-  const fin = ramp(T, 0, 0.6);
-  let a = 1 - fin;
-  const outro = ramp(T, 66.4, 67.6) * 0.62 + ramp(T, 68.3, 69.0) * 0.38;
-  a = Math.max(a, outro);
+  // entra desde el papel en blanco y termina en papel, con el título impreso encima
+  const a = Math.max(1 - ramp(T, 0, 0.5), ramp(T, 68.05, 68.8));
   if (a <= 0) return;
-  ctx.fillStyle = `rgba(8,8,10,${a})`;
+  ctx.fillStyle = CSS.paper;
+  ctx.globalAlpha = a;
   ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
 }

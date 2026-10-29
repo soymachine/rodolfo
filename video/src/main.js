@@ -13,9 +13,8 @@ const VOICE_URL = '../Locu%20Una%20manzana%2018_09_11%2017_13.m4a';
 
 async function setup() {
   await Promise.all([
-    document.fonts.load('300 112px "Cormorant Garamond"'),
-    document.fonts.load('italic 400 54px "Cormorant Garamond"'),
-    document.fonts.load('italic 300 44px "Cormorant Garamond"'),
+    document.fonts.load('800 200px "Inter Tight"'),
+    document.fonts.load('600 40px "Inter Tight"'),
   ]);
   init();
   draw(ctx, 0);

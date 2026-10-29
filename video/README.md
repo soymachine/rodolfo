@@ -3,9 +3,18 @@
 Vídeo de 69 s en 16:9 (1920×1080, 30 fps) que ilustra la locución
 `Locu Una manzana 18_09_11 17_13.m4a`. Está hecho íntegramente con código:
 
-- **Animación**: JavaScript + Canvas 2D. Un único diorama 2.5D de papel recortado (valle →
-  cementerio → fosa) recorrido por una cámara continua. Todo el dibujo es función pura del
-  tiempo, así que cada fotograma es reproducible.
+- **Animación**: JavaScript + Canvas 2D. Un único diorama 2.5D (valle → cementerio → fosa)
+  recorrido por una cámara continua. Todo el dibujo es función pura del tiempo, así que cada
+  fotograma es reproducible.
+- **Estética de cartel serigráfico** (referencia: cartel japonés «SALMON», 1980): papel crema y
+  dos tintas. La escena se dibuja primero como un mapa de densidad de tinta y una pasada de
+  semitono (`src/halftone.js`) la convierte en trama de puntos azul a 45° (siluetas con el
+  lomo en tinta plena y el «vientre» tramado) y rojo plano con grano, tramado a 15° donde es
+  parcial. Rojo sólo para lo esencial: el gran sol, la manzana, la boina, las cruces y las
+  palabras clave.
+- **Tipografía** (`src/type.js`): Inter Tight. Palabras clave gigantes en rojo que cruzan la
+  ilustración al pronunciarse, numerales negros apilados (capítulo / total), rótulo vertical con
+  el capítulo y subtítulos en bloque alineado a la derecha.
 - **Música y efectos**: Web Audio (`OfflineAudioContext`), sin muestras de audio externas.
 - **Render**: Playwright dibuja cada fotograma en Chromium y FFmpeg lo codifica en H.264;
   después mezcla la locución (comprimida, con ducking de la música) y normaliza a −16 LUFS.
@@ -20,7 +29,7 @@ entra a los 3 s del vídeo. Cada acción se ancla a una palabra con `cue('palabr
 
 | Palabra | Lo que ocurre |
 | --- | --- |
-| «amén» | el cura bendice; suena la campana del pueblo |
+| «amén» | el cura bendice; suena la campana del pueblo; «AMÉN» en rojo |
 | «silencio … valle» | ondas que se extienden por el valle; los pájaros dejan de batir las alas; la música se apaga |
 | «Cuatro hombres» | numerales I–IV y un golpe de timbal por cada hombre; se tienden las cuerdas |
 | «levantaron el ataúd» / «cabos de soga» | el ataúd se eleva; las sogas vibran |
@@ -34,8 +43,8 @@ entra a los 3 s del vídeo. Cada acción se ancla a una palabra con `cue('palabr
 | «disciplinadamente» | marcha a golpes: paso–pausa, todos a la vez, a tempo de la música |
 | «estrechar la mano» | apretones simultáneos en cada pausa |
 | «volvían la cabeza … cementerio» | giran todas las cabezas y la cámara barre hasta el extremo del cementerio |
-| «la sobrina con la boina» | boina roja (el único rojo además de la manzana) y el tema de la manzana |
-| «se santiguaban» | cruces doradas trazadas en el aire |
+| «la sobrina con la boina» | boina roja y el tema de la manzana |
+| «se santiguaban» | cruces rojas trazadas en el aire |
 | «ensalzados … difuntos» | cae la noche; los dolientes se elevan y se convierten en lápidas |
 | «la fiesta» | papel picado, farolillos, velas, confeti y un vals irónico |
 | final | la manzana cae sobre la tumba |
@@ -76,4 +85,6 @@ npx serve .. -l 8080
 - `src/figures.js` — siluetas articuladas (andar, brazos, cabeza, sombreros).
 - `src/music.js` — partitura y síntesis (cuerdas, campanas, celesta, timbales, acordeón, efectos).
 - `render.mjs` — render con Playwright + FFmpeg.
-- `fonts/` — Cormorant Garamond (SIL Open Font License).
+- `src/halftone.js` — impresión a dos tintas (semitono azul + rojo).
+- `src/type.js` — palabras clave, columna de capítulo, subtítulos y título.
+- `fonts/` — Inter Tight (SIL Open Font License).
