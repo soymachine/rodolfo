@@ -1,4 +1,4 @@
-# Una manzana definitiva — vídeo animado
+# Una manzana para la sed — vídeo animado
 
 Vídeo de 69 s en 16:9 (1920×1080, 30 fps) que ilustra la locución
 `Locu Una manzana 18_09_11 17_13.m4a`. Está hecho íntegramente con código:
@@ -10,7 +10,7 @@ Vídeo de 69 s en 16:9 (1920×1080, 30 fps) que ilustra la locución
 - **Render**: Playwright dibuja cada fotograma en Chromium y FFmpeg lo codifica en H.264;
   después mezcla la locución (comprimida, con ducking de la música) y normaliza a −16 LUFS.
 
-El resultado está en [`../una-manzana-definitiva.mp4`](../una-manzana-definitiva.mp4).
+El resultado está en [`../una-manzana-para-la-sed.mp4`](../una-manzana-para-la-sed.mp4).
 
 ## Sincronización
 

@@ -1,8 +1,8 @@
 {
-  "name": "una-manzana-definitiva",
+  "name": "una-manzana-para-la-sed",
   "version": "1.0.0",
   "private": true,
-  "description": "Vídeo animado (canvas + Web Audio) sincronizado con la locución de «Una manzana definitiva».",
+  "description": "Vídeo animado (canvas + Web Audio) sincronizado con la locución de «Una manzana para la sed».",
   "type": "module",
   "scripts": {
     "render": "node render.mjs",

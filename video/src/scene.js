@@ -1,4 +1,4 @@
-// "Una manzana definitiva" — escena animada en canvas.
+// "Una manzana para la sed" — escena animada en canvas.
 // Un único diorama 2.5D (valle → cementerio → fosa) recorrido por una cámara continua.
 // Todo es función pura del tiempo T: draw(ctx, T) produce siempre el mismo fotograma.
 
@@ -1749,7 +1749,7 @@ function drawTitle(ctx, T) {
   const outro = ramp(T, 66.6, 67.6);
   const a = Math.max(intro, outro);
   if (a <= 0) return;
-  const title = 'Una manzana definitiva';
+  const title = 'Una manzana para la sed';
   ctx.save();
   ctx.textBaseline = 'alphabetic';
   ctx.font = `300 ${112}px ${FONT}`;

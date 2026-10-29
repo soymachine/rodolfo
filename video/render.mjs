@@ -2,7 +2,7 @@
 // Renderiza el vídeo: Playwright dibuja cada fotograma del canvas y FFmpeg los codifica.
 // La música se genera en el navegador (OfflineAudioContext) y se mezcla con la locución.
 //
-//   node render.mjs                     → vídeo completo (../una-manzana-definitiva.mp4)
+//   node render.mjs                     → vídeo completo (../una-manzana-para-la-sed.mp4)
 //   node render.mjs --stills 5,12.5,40  → sólo fotogramas sueltos en build/stills/
 //   node render.mjs --from 30 --to 40   → un tramo (build/preview.mp4, sin audio final)
 
@@ -20,7 +20,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const BUILD = path.join(HERE, 'build');
 const VOICE = path.join(ROOT, 'Locu Una manzana 18_09_11 17_13.m4a');
-const OUT = path.join(ROOT, 'una-manzana-definitiva.mp4');
+const OUT = path.join(ROOT, 'una-manzana-para-la-sed.mp4');
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
