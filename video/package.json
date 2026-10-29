@@ -1,0 +1,14 @@
+{
+  "name": "una-manzana-definitiva",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vídeo animado (canvas + Web Audio) sincronizado con la locución de «Una manzana definitiva».",
+  "type": "module",
+  "scripts": {
+    "render": "node render.mjs",
+    "stills": "node render.mjs --stills"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}
