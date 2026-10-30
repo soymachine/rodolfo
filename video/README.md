@@ -21,6 +21,28 @@ Vídeo de 69 s en 16:9 (1920×1080, 30 fps) que ilustra la locución
 
 El resultado está en [`../una-manzana-para-la-sed.mp4`](../una-manzana-para-la-sed.mp4).
 
+## Versión de tipografía cinética
+
+[`../una-manzana-para-la-sed-tipografico.mp4`](../una-manzana-para-la-sed-tipografico.mp4) cuenta la
+misma locución sólo con letras, partículas y algunas formas vectoriales, con la paleta del cartel
+(papel `#ECE4D2`, azul `#1E4C9C`, rojo `#D6422A`, negro `#1C1B1A`). Cada una de las 25 frases tiene su
+propia escena y cada palabra entra cuando se pronuncia; entre escenas hay transiciones de trama de
+puntos, círculos, franjas, barridos en diagonal y empujes de cámara, y la imagen se sacude con los
+golpes de la banda sonora. Algunos momentos: «AMÉN» cae como una campanada con ondas; «SILENCIO» se
+estira hasta los bordes y se queda en contorno; cuatro barras rojas al ritmo de los timbales;
+«PASADO» se precipita letra a letra en la fosa, que después lo traga todo; «GENOVEVA» baraja letras
+antes de fijarse y «ARROJAR» lanza un puñado de granos (con los mismos tiempos que el sonido de la
+tierra); «EVA» se desintegra; huellas rojas a cada paso; «UNO TRAS OTRO» marcha a golpes; las
+palabras se dan la mano; «VOLVÍAN LA CABEZA» gira y la cámara barre hasta un campo de cruces; la
+boina cae sobre «BOINA»; «ENSALZADOS» se eleva letra a letra; «FIESTA» estalla en confeti y, al
+callar el vals, cae la manzana. El código está en `src/kinetic.js`:
+
+```bash
+node render.mjs --scene tipo
+```
+
+En el navegador: `video/index.html?scene=tipo`.
+
 ## Sincronización
 
 Los tiempos de cada palabra (`src/words.js`) se obtuvieron transcribiendo la locución con
@@ -87,4 +109,5 @@ npx serve .. -l 8080
 - `render.mjs` — render con Playwright + FFmpeg.
 - `src/halftone.js` — impresión a dos tintas (semitono azul + rojo).
 - `src/type.js` — palabras clave, columna de capítulo, subtítulos y título.
+- `src/kinetic.js` — versión de tipografía cinética (escenas, transiciones, partículas).
 - `fonts/` — Inter Tight (SIL Open Font License).

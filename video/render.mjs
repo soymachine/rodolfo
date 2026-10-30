@@ -4,7 +4,9 @@
 //
 //   node render.mjs                     → vídeo completo (../una-manzana-para-la-sed.mp4)
 //   node render.mjs --stills 5,12.5,40  → sólo fotogramas sueltos en build/stills/
-//   node render.mjs --from 30 --to 40   → un tramo (build/preview.mp4, sin audio final)
+//   node render.mjs --from 30 --to 40   → un tramo (build/preview.mp4)
+//   node render.mjs --scene tipo        → versión de tipografía cinética
+//                                         (../una-manzana-para-la-sed-tipografico.mp4)
 
 import { createServer } from 'node:http';
 import { readFile, mkdir, writeFile, access } from 'node:fs/promises';
@@ -20,10 +22,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
 const BUILD = path.join(HERE, 'build');
 const VOICE = path.join(ROOT, 'Locu Una manzana 18_09_11 17_13.m4a');
-const OUT = path.join(ROOT, 'una-manzana-para-la-sed.mp4');
-
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def; };
+const SCENE = opt('scene', '');
+const TAG = SCENE === 'tipo' ? '-tipografico' : '';
+const OUT = path.join(ROOT, `una-manzana-para-la-sed${TAG}.mp4`);
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.woff2': 'font/woff2', '.m4a': 'audio/mp4', '.json': 'application/json' };
 function serve() {
@@ -52,7 +55,7 @@ function run(cmd, argv, { input } = {}) {
 async function main() {
   await mkdir(BUILD, { recursive: true });
   const srv = await serve();
-  const url = `http://127.0.0.1:${srv.address().port}/video/index.html?render`;
+  const url = `http://127.0.0.1:${srv.address().port}/video/index.html?render${SCENE ? '&scene=' + SCENE : ''}`;
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('[página]', m.text()); });
@@ -88,7 +91,7 @@ async function main() {
   }
 
   // --- Vídeo: JPEG por la tubería → H.264
-  const silent = path.join(BUILD, full ? 'video-silent.mp4' : 'preview-silent.mp4');
+  const silent = path.join(BUILD, full ? `video-silent${TAG}.mp4` : `preview-silent${TAG}.mp4`);
   const enc = run('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-c:v', 'mjpeg', '-framerate', String(fps), '-i', '-',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-pix_fmt', 'yuv420p', '-tune', 'animation', silent], { input: true });
   const total = Math.round((to - from) * fps);
@@ -112,7 +115,7 @@ async function main() {
   srv.close();
 
   // --- Mezcla: locución (comprimida, desplazada 3 s) + música con ducking
-  const out = full ? OUT : path.join(BUILD, 'preview.mp4');
+  const out = full ? OUT : path.join(BUILD, `preview${TAG}.mp4`);
   const delayMs = Math.round((3.0 - from) * 1000);
   const voiceChain = delayMs >= 0
     ? `adelay=${delayMs}|${delayMs}`

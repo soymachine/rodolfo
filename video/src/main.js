@@ -1,6 +1,5 @@
 // Punto de entrada: prepara el canvas, expone la API de render (window.APP)
 // y ofrece una previsualización en tiempo real con voz + música.
-import { init, draw } from './scene.js';
 import { renderMusic } from './music.js';
 import { DURATION, FPS, W, H, VOICE_OFFSET } from './timeline.js';
 
@@ -11,12 +10,19 @@ const ctx = canvas.getContext('2d');
 
 const VOICE_URL = '../Locu%20Una%20manzana%2018_09_11%2017_13.m4a';
 
+// ?scene=tipo → versión de tipografía cinética; por defecto, la versión ilustrada
+const params = new URLSearchParams(location.search);
+let draw = () => {};
+
 async function setup() {
+  const mod = await import(params.get('scene') === 'tipo' ? './kinetic.js' : './scene.js');
+  draw = mod.draw;
   await Promise.all([
     document.fonts.load('800 200px "Inter Tight"'),
+    document.fonts.load('900 200px "Inter Tight"'),
     document.fonts.load('600 40px "Inter Tight"'),
   ]);
-  init();
+  mod.init();
   draw(ctx, 0);
 }
 
@@ -64,7 +70,7 @@ window.APP = {
 
 // ---------------------------------------------------------------------------
 // Previsualización interactiva (no se usa durante el render)
-if (!new URLSearchParams(location.search).has('render')) {
+if (!params.has('render')) {
   const ui = document.getElementById('ui');
   ui.hidden = false;
   const btn = document.getElementById('play');
